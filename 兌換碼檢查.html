@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>燕雲十六聲兌換碼重複比對器</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --card: #171a23;
+      --muted: #9aa4b2;
+      --text: #f5f7fa;
+      --line: #2a2f3a;
+      --accent: #d7b56d;
+      --danger: #ff6b6b;
+      --ok: #6ee7a8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Microsoft JhengHei", "Noto Sans TC", Arial, sans-serif;
+      background: radial-gradient(circle at top, #25202a 0, var(--bg) 45%);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 28px;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; }
+    h1 { margin: 0 0 8px; font-size: 30px; letter-spacing: 1px; }
+    .sub { color: var(--muted); margin-bottom: 22px; line-height: 1.6; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .card {
+      background: rgba(23, 26, 35, 0.92);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: 0 12px 34px rgba(0,0,0,.25);
+    }
+    label { display: block; font-weight: 700; margin-bottom: 10px; }
+    textarea {
+      width: 100%; min-height: 360px; resize: vertical;
+      border-radius: 12px; border: 1px solid var(--line);
+      background: #0c0f15; color: var(--text);
+      padding: 14px; font-size: 15px; line-height: 1.5;
+      outline: none;
+    }
+    textarea:focus { border-color: var(--accent); }
+    .btns { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+    button {
+      border: 0; border-radius: 999px; padding: 10px 16px;
+      cursor: pointer; font-weight: 700; color: #111;
+      background: var(--accent);
+    }
+    button.secondary { background: #2f3542; color: var(--text); border: 1px solid var(--line); }
+    button.danger { background: #4a2024; color: #ffd9d9; border: 1px solid #6d2d33; }
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+    .stat {
+      background: #0c0f15; border: 1px solid var(--line); border-radius: 12px;
+      padding: 12px;
+    }
+    .num { font-size: 24px; font-weight: 800; margin-top: 4px; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .section-title { margin: 16px 0 8px; font-weight: 800; }
+    pre {
+      white-space: pre-wrap; word-break: break-all;
+      background: #0c0f15; border: 1px solid var(--line); border-radius: 12px;
+      padding: 12px; min-height: 80px; max-height: 260px; overflow: auto;
+      margin: 0; line-height: 1.55;
+    }
+    .ok { color: var(--ok); }
+    .bad { color: var(--danger); }
+    .hint { color: var(--muted); font-size: 13px; margin-top: 8px; }
+    @media (max-width: 850px) {
+      body { padding: 16px; }
+      .grid { grid-template-columns: 1fr; }
+      .stats { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>燕雲十六聲兌換碼重複比對器</h1>
+    <div class="sub">貼上兌換碼清單，可自動忽略「複製、獎勵、中文說明」等文字，只抓英文數字兌換碼，並比對是否重複。</div>
+
+    <div class="grid">
+      <div class="card">
+        <label for="input">貼上兌換碼清單</label>
+        <textarea id="input" placeholder="例如：&#10;WWMREDDIT0625&#10;複製&#10;FHKD7HHWRJ&#10;獎勵：長鳴玉x3"></textarea>
+        <div class="btns">
+          <button onclick="checkCodes()">開始比對</button>
+          <button class="secondary" onclick="copyUnique()">複製不重複清單</button>
+          <button class="secondary" onclick="copyDuplicates()">複製重複碼</button>
+          <button class="danger" onclick="clearAll()">清空</button>
+        </div>
+        <div class="hint">判斷規則：只擷取 4 個字元以上的英文數字碼，並自動轉成大寫比對。</div>
+      </div>
+
+      <div class="card">
+        <div class="stats">
+          <div class="stat"><div class="muted">抓到兌換碼</div><div id="total" class="num">0</div></div>
+          <div class="stat"><div class="muted">不重複數量</div><div id="uniqueCount" class="num ok">0</div></div>
+          <div class="stat"><div class="muted">重複種類</div><div id="dupCount" class="num bad">0</div></div>
+        </div>
+
+        <div class="section-title">重複兌換碼</div>
+        <pre id="duplicates">尚未比對</pre>
+
+        <div class="section-title">不重複兌換碼清單</div>
+        <pre id="unique">尚未比對</pre>
+      </div>
+    </div>
+  </div>
+
+<script>
+function extractCodes(text) {
+  const blacklist = new Set([
+    'COPY','COPIED','REWARD','REWARDS','TEXT','CODE','CODES',
+    'X1','X2','X3','X10','X20','X30','X50','X100','X150','X5000','X20000'
+  ]);
+
+  const matches = text.toUpperCase().match(/[A-Z0-9]{4,}/g) || [];
+  return matches.filter(code => {
+    if (blacklist.has(code)) return false;
+    if (/^X\d+$/.test(code)) return false;
+    if (/^\d+$/.test(code)) return false;
+    return /[A-Z]/.test(code) && /\d/.test(code) || /^WWM[A-Z0-9]+$/.test(code) || /^[A-Z]+GO$/.test(code) || code === 'HAPPY515' || code === 'HEXIGOGO' || code === 'GOHOME123';
+  });
+}
+
+function checkCodes() {
+  const text = document.getElementById('input').value;
+  const codes = extractCodes(text);
+  const map = new Map();
+
+  codes.forEach(code => map.set(code, (map.get(code) || 0) + 1));
+
+  const unique = Array.from(map.keys());
+  const duplicates = Array.from(map.entries()).filter(([_, count]) => count > 1);
+
+  document.getElementById('total').textContent = codes.length;
+  document.getElementById('uniqueCount').textContent = unique.length;
+  document.getElementById('dupCount').textContent = duplicates.length;
+
+  document.getElementById('unique').textContent = unique.length ? unique.join('\n') : '沒有抓到兌換碼';
+  document.getElementById('duplicates').textContent = duplicates.length
+    ? duplicates.map(([code, count]) => `${code}  出現 ${count} 次`).join('\n')
+    : '沒有發現重複兌換碼';
+}
+
+function copyText(id) {
+  const text = document.getElementById(id).textContent;
+  navigator.clipboard.writeText(text).then(() => alert('已複製'));
+}
+function copyUnique() { copyText('unique'); }
+function copyDuplicates() { copyText('duplicates'); }
+function clearAll() {
+  document.getElementById('input').value = '';
+  document.getElementById('total').textContent = '0';
+  document.getElementById('uniqueCount').textContent = '0';
+  document.getElementById('dupCount').textContent = '0';
+  document.getElementById('unique').textContent = '尚未比對';
+  document.getElementById('duplicates').textContent = '尚未比對';
+}
+
+document.getElementById('input').addEventListener('input', checkCodes);
+</script>
+</body>
+</html>
